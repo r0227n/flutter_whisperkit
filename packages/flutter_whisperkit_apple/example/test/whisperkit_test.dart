@@ -6,32 +6,52 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FlutterWhisperkitApple whisperKit;
-  late MethodChannel channel;
-
+  
   setUp(() {
-    channel = const MethodChannel('dev.flutter.pigeon.flutter_whisperkit_apple.WhisperKitApi');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      channel,
-      (MethodCall methodCall) async {
-        if (methodCall.method == 'initializeWhisperKit') {
-          return true;
-        } else if (methodCall.method == 'getAvailableModels') {
-          return ['tiny', 'base', 'small', 'medium', 'large'];
-        }
-        return null;
+    whisperKit = FlutterWhisperkitApple();
+    
+    // Set up mock response for the BasicMessageChannel
+    const channelName = 'dev.flutter.pigeon.flutter_whisperkit_apple.WhisperKitApi.initializeWhisperKit';
+    final codec = const StandardMethodCodec();
+    
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+      channelName,
+      (ByteData? message) async {
+        // Return success response
+        final Map<Object?, Object?> result = <Object?, Object?>{};
+        result['result'] = true;
+        return codec.encodeSuccessEnvelope(<Object?>[true]);
       },
     );
-    whisperKit = FlutterWhisperkitApple();
+    
+    // Set up mock for getAvailableModels
+    const modelsChannelName = 'dev.flutter.pigeon.flutter_whisperkit_apple.WhisperKitApi.getAvailableModels';
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+      modelsChannelName,
+      (ByteData? message) async {
+        final List<String> models = ['tiny', 'base', 'small', 'medium', 'large'];
+        return codec.encodeSuccessEnvelope(<Object?>[models]);
+      },
+    );
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      channel,
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+      'dev.flutter.pigeon.flutter_whisperkit_apple.WhisperKitApi.initializeWhisperKit',
+      null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+      'dev.flutter.pigeon.flutter_whisperkit_apple.WhisperKitApi.getAvailableModels',
       null,
     );
   });
 
   test('initializeWhisperKit should complete successfully', () async {
+    // Skip the test in a real environment
+    if (!TestWidgetsFlutterBinding.ensureInitialized().inTest) {
+      return;
+    }
+    
     try {
       final config = WhisperKitConfig(
         enableVAD: true,
@@ -40,6 +60,7 @@ void main() {
         enableLanguageIdentification: true,
       );
 
+      // This should now use our mock handler
       final result = await whisperKit.initializeWhisperKit(config: config);
       expect(result, isTrue);
       print('WhisperKit initialized successfully: $result');
