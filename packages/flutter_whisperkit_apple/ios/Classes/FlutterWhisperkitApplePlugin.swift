@@ -16,17 +16,59 @@ public class FlutterWhisperkitApplePlugin: NSObject, FlutterPlugin, WhisperKitAp
         return "iOS " + UIDevice.current.systemVersion
     }
     
-    public func initializeWhisperKit(config: WhisperKitConfig_pigeongenerated) throws -> Bool {
-        let whisperConfig = WhisperKitConfig(
-            modelPath: config.modelPath,
-            enableVAD: config.enableVAD ?? false,
-            vadFallbackSilenceThreshold: config.vadFallbackSilenceThreshold ?? 0,
-            vadTemperature: config.vadTemperature ?? 0.0,
-            enableLanguageIdentification: config.enableLanguageIdentification ?? false
-        )
-        
+    public func initializeWhisperKit(config: PigeonWhisperKitConfig) throws -> Bool {
         do {
-            whisperKit = try WhisperKit(config: whisperConfig)
+            var audioEncoderComputeUnits: ComputeUnits = .cpuAndNeuralEngine
+            var textDecoderComputeUnits: ComputeUnits = .cpuAndNeuralEngine
+            
+            if #available(iOS 16.0, *) {
+                audioEncoderComputeUnits = .cpuAndNeuralEngine
+                textDecoderComputeUnits = .cpuAndNeuralEngine
+            } else {
+                audioEncoderComputeUnits = .cpuAndGPU
+                textDecoderComputeUnits = .cpuAndGPU
+            }
+            
+            let computeOptions = ModelComputeOptions(
+                audioEncoderCompute: audioEncoderComputeUnits,
+                textDecoderCompute: textDecoderComputeUnits
+            )
+            
+            let modelFolder = config.modelPath ?? NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0] + "/WhisperKit/Models"
+            let modelName = modelFolder.components(separatedBy: "/").last ?? "tiny"
+            
+            var modelVariant = "tiny"
+            if modelName.contains("tiny") { modelVariant = "tiny" }
+            else if modelName.contains("base") { modelVariant = "base" }
+            else if modelName.contains("small") { modelVariant = "small" }
+            else if modelName.contains("medium") { modelVariant = "medium" }
+            else if modelName.contains("large") { modelVariant = "large" }
+            
+            let whisperKitConfig = WhisperKit.Configuration(
+                model: modelVariant,
+                modelFolder: modelFolder,
+                computeOptions: computeOptions,
+                audioProcessingOptions: {
+                    let options = AudioProcessingOptions()
+                    options.vadEnabled = config.enableVAD ?? false
+                    if let silenceThreshold = config.vadFallbackSilenceThreshold {
+                        options.vadSilenceThreshold = Double(silenceThreshold) / 1000.0
+                    }
+                    if let speechThreshold = config.vadTemperature {
+                        options.vadSpeechThreshold = speechThreshold
+                    }
+                    return options
+                }(),
+                languageIdentificationOptions: {
+                    let options = LanguageIdentificationOptions()
+                    options.enabled = config.enableLanguageIdentification ?? false
+                    return options
+                }(),
+                verbose: true,
+                logLevel: .info
+            )
+            
+            whisperKit = try WhisperKit(config: whisperKitConfig)
             return true
         } catch {
             throw FlutterError(code: "INITIALIZATION_ERROR", 
@@ -35,7 +77,7 @@ public class FlutterWhisperkitApplePlugin: NSObject, FlutterPlugin, WhisperKitAp
         }
     }
     
-    public func transcribeAudioFile(filePath: String) throws -> TranscriptionResult_pigeongenerated {
+    public func transcribeAudioFile(filePath: String) throws -> PigeonTranscriptionResult {
         guard let whisperKit = whisperKit else {
             throw FlutterError(code: "NOT_INITIALIZED", 
                               message: "WhisperKit is not initialized", 
@@ -43,17 +85,20 @@ public class FlutterWhisperkitApplePlugin: NSObject, FlutterPlugin, WhisperKitAp
         }
         
         do {
-            let result = try whisperKit.transcribeAudioFile(filePath)
+            let audioURL = URL(fileURLWithPath: filePath)
+            let result = try whisperKit.transcribe(audioURL: audioURL)
             
-            return TranscriptionResult_pigeongenerated(
+            let pigeonSegments = result.segments.map { segment in
+                return PigeonTranscriptionSegment(
+                    text: segment.text,
+                    startTime: segment.start,
+                    endTime: segment.end
+                )
+            }
+            
+            return PigeonTranscriptionResult(
                 text: result.text,
-                segments: result.segments.map { segment in
-                    TranscriptionSegment_pigeongenerated(
-                        text: segment.text,
-                        startTime: segment.startTime,
-                        endTime: segment.endTime
-                    )
-                },
+                segments: pigeonSegments,
                 language: result.language
             )
         } catch {
@@ -81,7 +126,7 @@ public class FlutterWhisperkitApplePlugin: NSObject, FlutterPlugin, WhisperKitAp
         return true
     }
     
-    public func stopStreamingTranscription() throws -> TranscriptionResult_pigeongenerated {
+    public func stopStreamingTranscription() throws -> PigeonTranscriptionResult {
         guard let whisperKit = whisperKit else {
             throw FlutterError(code: "NOT_INITIALIZED", 
                               message: "WhisperKit is not initialized", 
@@ -91,18 +136,10 @@ public class FlutterWhisperkitApplePlugin: NSObject, FlutterPlugin, WhisperKitAp
         streamingTask?.cancel()
         
         do {
-            let result = try whisperKit.stopStreamingTranscription()
-            
-            return TranscriptionResult_pigeongenerated(
-                text: result.text,
-                segments: result.segments.map { segment in
-                    TranscriptionSegment_pigeongenerated(
-                        text: segment.text,
-                        startTime: segment.startTime,
-                        endTime: segment.endTime
-                    )
-                },
-                language: result.language
+            return PigeonTranscriptionResult(
+                text: "Streaming transcription not supported in this version",
+                segments: [],
+                language: "en"
             )
         } catch {
             throw FlutterError(code: "TRANSCRIPTION_ERROR", 
@@ -119,57 +156,5 @@ public class FlutterWhisperkitApplePlugin: NSObject, FlutterPlugin, WhisperKitAp
                               message: "Failed to get available models: \(error.localizedDescription)", 
                               details: nil)
         }
-    }
-}
-
-private class WhisperKit {
-    struct WhisperKitConfig {
-        let modelPath: String?
-        let enableVAD: Bool
-        let vadFallbackSilenceThreshold: Int
-        let vadTemperature: Double
-        let enableLanguageIdentification: Bool
-    }
-    
-    struct TranscriptionSegment {
-        let text: String
-        let startTime: Double
-        let endTime: Double
-    }
-    
-    struct TranscriptionResult {
-        let text: String
-        let segments: [TranscriptionSegment]
-        let language: String?
-    }
-    
-    init(config: WhisperKitConfig) throws {
-    }
-    
-    func transcribeAudioFile(_ filePath: String) throws -> TranscriptionResult {
-        return TranscriptionResult(
-            text: "Sample transcription",
-            segments: [
-                TranscriptionSegment(text: "Sample segment", startTime: 0.0, endTime: 1.0)
-            ],
-            language: "en"
-        )
-    }
-    
-    func startStreamingTranscription() async throws {
-    }
-    
-    func stopStreamingTranscription() throws -> TranscriptionResult {
-        return TranscriptionResult(
-            text: "Sample transcription",
-            segments: [
-                TranscriptionSegment(text: "Sample segment", startTime: 0.0, endTime: 1.0)
-            ],
-            language: "en"
-        )
-    }
-    
-    static func getAvailableModels() throws -> [String] {
-        return ["tiny", "base", "small", "medium", "large"]
     }
 }
