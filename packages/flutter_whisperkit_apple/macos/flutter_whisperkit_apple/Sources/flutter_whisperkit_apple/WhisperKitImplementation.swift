@@ -1,8 +1,12 @@
 import Foundation
 import WhisperKit
+import FlutterMacOS
 
 public class WhisperKitImplementation {
     private var whisperKit: WhisperKit?
+    
+    public init() {
+    }
     
     public func initialize(config: WhisperKitConfig) throws -> Bool {
         do {
