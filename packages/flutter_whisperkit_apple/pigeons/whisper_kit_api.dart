@@ -2,9 +2,11 @@ import 'package:pigeon/pigeon.dart';
 
 @ConfigurePigeon(
   PigeonOptions(
-    input: 'pigeons/whisper_kit_api.dart',
+    input: 'pigeons/whisper_kit_api.g.dart',
     dartOut: 'lib/src/whisper_kit_api.dart',
-    swiftOut: 'macos/Classes/WhisperKitApi.swift',
+    swiftOut: 'macos/Runner/WhisperKitApi.g.swift',
+    swiftOptions: SwiftOptions(),
+    dartPackageName: 'flutter_whisperkit_apple',
   ),
 )
 class WhisperKitConfig {
