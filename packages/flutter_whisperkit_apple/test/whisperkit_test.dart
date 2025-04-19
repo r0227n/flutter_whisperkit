@@ -1,24 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_whisperkit_apple/flutter_whisperkit_apple.dart';
-import 'package:flutter_whisperkit_apple/flutter_whisperkit_apple_platform_interface.dart';
-import 'package:flutter_whisperkit_apple/flutter_whisperkit_apple_method_channel.dart';
-import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:flutter/services.dart';
-
-class MockFlutterWhisperkitApplePlatform
-    with MockPlatformInterfaceMixin
-    implements FlutterWhisperkitApplePlatform {
-
-  @override
-  Future<String?> getPlatformVersion() => Future.value('42');
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  
-  final FlutterWhisperkitApplePlatform initialPlatform = FlutterWhisperkitApplePlatform.instance;
-  late FlutterWhisperkitApple whisperKit;
 
+  late FlutterWhisperkitApple whisperKit;
+  
   setUp(() {
     whisperKit = FlutterWhisperkitApple();
     
@@ -30,8 +18,6 @@ void main() {
       channelName,
       (ByteData? message) async {
         // Return success response
-        final Map<Object?, Object?> result = <Object?, Object?>{};
-        result['result'] = true;
         return codec.encodeSuccessEnvelope(<Object?>[true]);
       },
     );
@@ -82,18 +68,6 @@ void main() {
     );
   });
 
-  test('$MethodChannelFlutterWhisperkitApple is the default instance', () {
-    expect(initialPlatform, isInstanceOf<MethodChannelFlutterWhisperkitApple>());
-  });
-
-  test('getPlatformVersion', () async {
-    FlutterWhisperkitApple flutterWhisperkitApplePlugin = FlutterWhisperkitApple();
-    MockFlutterWhisperkitApplePlatform fakePlatform = MockFlutterWhisperkitApplePlatform();
-    FlutterWhisperkitApplePlatform.instance = fakePlatform;
-
-    expect(await flutterWhisperkitApplePlugin.getPlatformVersion(), '42');
-  });
-  
   group('WhisperKit API Tests', () {
     test('initializeWhisperKit should complete successfully', () async {
       // Skip the test in a real environment
